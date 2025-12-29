@@ -1,0 +1,22 @@
+# 🚪 Artix-7 Garage Controller
+
+Este proyecto consiste en el desarrollo de un sistema de control automatizado para una puerta de garaje basado en la FPGA **Artix-7 (Nexys 4 DDR)**. El sistema utiliza lógica **VHDL** para gestionar periféricos de actuación y sensores de seguridad, ofreciendo una solución síncrona, robusta y modular.
+
+## 🕹️ Características del Proyecto
+
+- **Control Síncrono**: Implementación de una **FSM de tipo Moore** para una gestión de estados.
+- **Seguridad Activa**: Detección de obstáculos mediante sensor **HC-SR04** con reapertura automática instantánea.
+- **Movimiento Preciso**: Control de posición de un servomotor SG90 mediante señales **PWM de 50 Hz**.
+- **Interfaz Alfanumérica**: Visualización de estados (**OPEN, CLSE, CLOS, Err**) en displays de 7 segmentos.
+- **Maqueta Mecánica**: Diseño físico con acoplamiento directo entre el servo y la puerta.
+
+## 🛠️ Especificaciones Técnicas
+
+- **FPGA**: Xilinx Artix-7 (Nexys 4 DDR).
+- **Entorno**: Vivado.
+- **Módulos**:
+  - `Pulse_Generator`: Divisor de frecuencia para base de tiempos de 1 ms.
+  - `Timer`: Temporizador parametrizado para esperas.
+  - `Servo_Controller`: Generador PWM con resolución de microsegundos.
+  - `Ultrasonic_sensor`: Driver de disparo y medición de eco.
+- **Protección**: Sincronizadores y Debouncers en todas las entradas físicas.

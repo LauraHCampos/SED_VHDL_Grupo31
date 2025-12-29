@@ -3,178 +3,134 @@ use IEEE.STD_LOGIC_1164.ALL;
 
 entity Top_Garage is
     Port ( 
-        CLK100MHZ  : in  STD_LOGIC; -- Reloj de la placa (E3)
-        CPU_RESETN : in  STD_LOGIC; -- Reset activo a nivel bajo (C12)
+        CLK100MHZ  : in  STD_LOGIC;
+        CPU_RESETN : in  STD_LOGIC; -- Reset activo a nivel bajo (Botón rojo)
+        BTN_OPEN   : in  STD_LOGIC; -- Pulsador central
         
-        -- Entradas físicas
-        SW_SENSOR_OBS : in  STD_LOGIC; -- Simulación sensor barrera (SW0 o similar)
-        BTN_OPEN      : in  STD_LOGIC; -- Botón para abrir (BTNC o similar)
+        -- Conexiones Pmod para la maqueta
+        PMOD_ECHO  : in  STD_LOGIC; -- Sensor Ultrasonidos
+        PMOD_TRIG  : out STD_LOGIC; -- Sensor Ultrasonidos
+        PMOD_SERVO : out STD_LOGIC; -- Señal PWM al Servo
         
-        -- Salidas físicas (LEDs para visualizar estado)
-        LED           : out STD_LOGIC_VECTOR(1 downto 0) 
-        -- LED(0) = Motor Abriendo (Verde)
-        -- LED(1) = Motor Cerrando (Rojo/Otro)
+        -- Salidas de la placa
+        LED        : out STD_LOGIC_VECTOR(1 downto 0);
+        SEG        : out STD_LOGIC_VECTOR(6 downto 0);
+        AN         : out STD_LOGIC_VECTOR(7 downto 0)
     );
 end Top_Garage;
 
 architecture Structural of Top_Garage is
 
-    -- ==========================================
-    -- 1. DECLARACIÓN DE COMPONENTES
-    -- ==========================================
-    
-    component Synchronizer
-        Port ( 
-            clk      : in  STD_LOGIC;
-            async_in : in  STD_LOGIC;
-            sync_out : out STD_LOGIC
-        );
+    -- DECLARACIÓN DE COMPONENTES
+
+    -- Sincronizador para evitar metaestabilidad
+    component Synchronizer is
+        Port ( clk, async_in : in STD_LOGIC; sync_out : out STD_LOGIC );
     end component;
 
-    component Debouncer
+    -- Antirrebotes para el botón físico
+    component Debouncer is
         Generic ( WAIT_CYCLES : integer := 1000000 );
-        Port ( 
-            clk        : in  STD_LOGIC;
-            rst        : in  STD_LOGIC;
-            input_sig  : in  STD_LOGIC;
-            output_sig : out STD_LOGIC
-        );
+        Port ( clk, rst, input_sig : in STD_LOGIC; output_sig : out STD_LOGIC );
     end component;
 
-    component Pulse_Generator
+    -- Generador de pulsos de 1ms (Prescaler)
+    component Pulse_Generator is
         Generic ( MAX_COUNT : integer := 100000 );
+        Port ( clk, rst : in STD_LOGIC; tick_1ms : out STD_LOGIC );
+    end component;
+
+    -- Temporizador para estados de la FSM
+    component Timer is
+        Port ( clk, rst, tick_en, start_time : in STD_LOGIC; duration : in integer; time_up : out STD_LOGIC );
+    end component;
+
+    -- Controlador del Sensor de Ultrasonidos
+    component Ultrasonic_sensor is
+        Port ( clk, rst, echo : in STD_LOGIC; trigger, obstacle : out STD_LOGIC );
+    end component;
+
+    -- Controlador del Servo (Generador PWM)
+    component Servo_Controller is
+        Port ( clk, rst, position_cmd : in STD_LOGIC; pwm_out : out STD_LOGIC );
+    end component;
+
+    -- Máquina de Estados
+    component FSM_Garaje is
         Port ( 
-            clk      : in  STD_LOGIC;
-            rst      : in  STD_LOGIC;
-            tick_1ms : out STD_LOGIC
+            clk, rst, s_obstaculo, btn_open, timer_done : in STD_LOGIC; 
+            start_timer, servo_cmd : out STD_LOGIC; 
+            state_status : out STD_LOGIC_VECTOR(2 downto 0) 
         );
     end component;
 
-    component Timer
+    -- Controlador de los Displays de 7 Segmentos
+    component Display_Controller is
         Port ( 
-            clk        : in  STD_LOGIC;
-            rst        : in  STD_LOGIC;
-            tick_en    : in  STD_LOGIC;
-            start_time : in  STD_LOGIC;
-            duration   : in  integer;
-            time_up    : out STD_LOGIC
-        );
-    end component;
-    
-    component FSM_Garaje
-        Port ( 
-            clk         : in  STD_LOGIC;
-            rst         : in  STD_LOGIC;
-            s_obstaculo : in  STD_LOGIC;
-            btn_open    : in  STD_LOGIC;
-            timer_done  : in  STD_LOGIC;
-            start_timer : out STD_LOGIC;
-            motor_open  : out STD_LOGIC;
-            motor_close : out STD_LOGIC
+            clk, rst : in STD_LOGIC; 
+            state_code : in STD_LOGIC_VECTOR(2 downto 0); 
+            seg : out STD_LOGIC_VECTOR(6 downto 0); 
+            an : out STD_LOGIC_VECTOR(7 downto 0) 
         );
     end component;
 
-    -- ==========================================
-    -- 2. SEÑALES INTERNAS
-    -- ==========================================
-    
-    signal rst_sys       : STD_LOGIC; -- Reset del sistema (Activo Alto)
-    signal tick_1ms      : STD_LOGIC; -- Base de tiempos
-    
-    -- Señales intermedias para sincronización
-    signal sync_btn_open   : STD_LOGIC;
-    signal sync_sensor_obs : STD_LOGIC;
-    
-    -- Señales limpias y estables (listas para usar en lógica)
-    signal clean_btn_open   : STD_LOGIC;
-    signal clean_sensor_obs : STD_LOGIC;
-    
-    -- Interfaz Timer-FSM
-    signal fsm_start_timer : STD_LOGIC;
-    signal timer_done_sig  : STD_LOGIC;
+    -- SEÑALES INTERNAS PARA CONECTAR MÓDULOS
+
+    signal rst_i         : std_logic;
+    signal tick_1ms_i    : std_logic;
+    signal btn_sync      : std_logic;
+    signal btn_clean     : std_logic;
+    signal start_timer_i : std_logic;
+    signal timer_done_i  : std_logic;
+    signal obstacle_i    : std_logic;
+    signal servo_cmd_i   : std_logic;
+    signal state_code_i  : std_logic_vector(2 downto 0);
 
 begin
 
-    -- Gestión del Reset: El botón de la placa es '0' al pulsar, lo invertimos a '1'
-    rst_sys <= not CPU_RESETN;
+    -- Lógica de Reset (CPU_RESETN es activo bajo, rst_i será activo alto)
+    rst_i <= not CPU_RESETN;
 
-    -- ==========================================
-    -- 3. INSTANCIACIÓN DE BLOQUES
-    -- ==========================================
+    -- INSTANCIACIÓN DE LOS COMPONENTES (PORT MAP)
 
-    -- A) GENERADOR DE PULSOS (Prescaler)
-    Inst_Prescaler: Pulse_Generator
-    Generic Map ( MAX_COUNT => 100000 ) -- 100,000 ciclos = 1ms a 100MHz
-    Port Map (
-        clk      => CLK100MHZ,
-        rst      => rst_sys,
-        tick_1ms => tick_1ms
-    );
+    -- Prescaler: Genera base de tiempos de 1ms
+    Prescaler: Pulse_Generator 
+        generic map ( MAX_COUNT => 100000 )
+        port map ( clk => CLK100MHZ, rst => rst_i, tick_1ms => tick_1ms_i );
 
-    -- B) ACONDICIONAMIENTO DE ENTRADAS (SYNC + DEBOUNCE)
-    
-    -- Canal 1: Botón de Abrir
-    Sync_Btn: Synchronizer
-    Port Map (
-        clk      => CLK100MHZ,
-        async_in => BTN_OPEN,
-        sync_out => sync_btn_open
-    );
-    
-    Debounce_Btn: Debouncer
-    Generic Map ( WAIT_CYCLES => 1000000 ) -- 10ms de filtro
-    Port Map (
-        clk        => CLK100MHZ,
-        rst        => rst_sys,
-        input_sig  => sync_btn_open,
-        output_sig => clean_btn_open
-    );
+    -- Acondicionamiento del botón de apertura
+    Sync: Synchronizer 
+        port map ( clk => CLK100MHZ, async_in => BTN_OPEN, sync_out => btn_sync );
 
-    -- Canal 2: Sensor de Obstáculo (Switch)
-    Sync_Sensor: Synchronizer
-    Port Map (
-        clk      => CLK100MHZ,
-        async_in => SW_SENSOR_OBS,
-        sync_out => sync_sensor_obs
-    );
-    
-    Debounce_Sensor: Debouncer
-    Generic Map ( WAIT_CYCLES => 1000000 ) -- 10ms de filtro
-    Port Map (
-        clk        => CLK100MHZ,
-        rst        => rst_sys,
-        input_sig  => sync_sensor_obs,
-        output_sig => clean_sensor_obs
-    );
+    Deboun: Debouncer 
+        generic map ( WAIT_CYCLES => 1000000 )
+        port map ( clk => CLK100MHZ, rst => rst_i, input_sig => btn_sync, output_sig => btn_clean );
 
-    -- C) TEMPORIZADOR DEL SISTEMA
-    Inst_Timer: Timer
-    Port Map (
-        clk        => CLK100MHZ,
-        rst        => rst_sys,
-        tick_en    => tick_1ms,       -- Conectado al prescaler
-        start_time => fsm_start_timer,-- Orden viene de la FSM
-        duration   => 5000,           -- 5000 ms = 5 Segundos
-        time_up    => timer_done_sig  -- Aviso va a la FSM
-    );
+    -- Sensores y Actuadores (Ultrasonidos y Servo)
+    Ultrasonic: Ultrasonic_sensor 
+        port map ( clk => CLK100MHZ, rst => rst_i, echo => PMOD_ECHO, trigger => PMOD_TRIG, obstacle => obstacle_i );
 
-    -- D) MÁQUINA DE ESTADOS (CONTROL)
-    Inst_FSM: FSM_Garaje
-    Port Map (
-        clk         => CLK100MHZ,
-        rst         => rst_sys,
-        
-        -- Entradas limpias
-        s_obstaculo => clean_sensor_obs,
-        btn_open    => clean_btn_open,
-        timer_done  => timer_done_sig,
-        
-        -- Salidas de control interna
-        start_timer => fsm_start_timer,
-        
-        -- Salidas al exterior (LEDs)
-        motor_open  => LED(0),
-        motor_close => LED(1)
-    );
+    Servo: Servo_Controller 
+        port map ( clk => CLK100MHZ, rst => rst_i, position_cmd => servo_cmd_i, pwm_out => PMOD_SERVO );
+
+    -- Control de tiempo para la FSM
+    Tim: Timer 
+        port map ( clk => CLK100MHZ, rst => rst_i, tick_en => tick_1ms_i, start_time => start_timer_i, duration => 5000, time_up => timer_done_i );
+
+    -- Inteligencia del sistema
+    FSM: FSM_Garaje 
+        port map ( 
+            clk => CLK100MHZ, rst => rst_i, s_obstaculo => obstacle_i, 
+            btn_open => btn_clean, timer_done => timer_done_i, 
+            start_timer => start_timer_i, servo_cmd => servo_cmd_i, state_status => state_code_i 
+        );
+
+    -- Visualización
+    Display: Display_Controller 
+        port map ( clk => CLK100MHZ, rst => rst_i, state_code => state_code_i, seg => SEG, an => AN );
+
+    -- Testigos en LEDs
+    LED(0) <= servo_cmd_i;   -- LED encendido si la puerta debería estar abierta
+    LED(1) <= obstacle_i;    -- LED encendido si el sensor detecta algo
 
 end Structural;

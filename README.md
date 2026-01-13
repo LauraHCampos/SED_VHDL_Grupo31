@@ -25,10 +25,10 @@ Este proyecto consiste en el desarrollo de un sistema de control automatizado pa
 
 El repositorio refleja la evolución del diseño síncrono:
 
-1. **v1 (Lógica)**: Diseño de la FSM central y validación por testbench.
-2. **v2 (Actuación)**: Implementación de tiempos y controlador PWM.
-3. **v3 (Seguridad)**: Integración del driver de ultrasonidos y lógica de interrupción.
-4. **v4 (Final)**: Versión definitiva con interfaz de displays y esquemático RTL completo.
+1. **Lógica**: Diseño de la FSM central y validación por testbench.
+2. **Actuación**: Implementación de tiempos y controlador PWM.
+3. **Seguridad**: Integración del driver de ultrasonidos y lógica de interrupción.
+4. **Final**: Versión definitiva con interfaz de displays y esquemático RTL completo.
 
 ## 🏗️ Montaje Final
 

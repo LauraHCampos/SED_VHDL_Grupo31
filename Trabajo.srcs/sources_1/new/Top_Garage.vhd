@@ -13,9 +13,9 @@ entity Top_Garage is
         PMOD_SERVO : out STD_LOGIC; -- Señal PWM al Servo
         
         -- Salidas de la placa
-        LED        : out STD_LOGIC_VECTOR(1 downto 0);
-        SEG        : out STD_LOGIC_VECTOR(6 downto 0);
-        AN         : out STD_LOGIC_VECTOR(7 downto 0)
+        LED        : out STD_LOGIC_VECTOR(2 downto 0);
+        seg        : out STD_LOGIC_VECTOR(6 downto 0);
+        an         : out STD_LOGIC_VECTOR(7 downto 0)
     );
 end Top_Garage;
 
@@ -55,7 +55,7 @@ architecture Structural of Top_Garage is
         Port ( clk, rst, position_cmd : in STD_LOGIC; pwm_out : out STD_LOGIC );
     end component;
 
-    -- Máquina de Estados
+    -- Máquina de Estados (Cerebro del sistema)
     component FSM_Garaje is
         Port ( 
             clk, rst, s_obstaculo, btn_open, timer_done : in STD_LOGIC; 
@@ -109,7 +109,7 @@ begin
     -- Sensores y Actuadores (Ultrasonidos y Servo)
     Ultrasonic: Ultrasonic_sensor 
         port map ( clk => CLK100MHZ, rst => rst_i, echo => PMOD_ECHO, trigger => PMOD_TRIG, obstacle => obstacle_i );
-
+        --PMOD_TRIG <= '1';
     Servo: Servo_Controller 
         port map ( clk => CLK100MHZ, rst => rst_i, position_cmd => servo_cmd_i, pwm_out => PMOD_SERVO );
 
@@ -129,8 +129,8 @@ begin
     Display: Display_Controller 
         port map ( clk => CLK100MHZ, rst => rst_i, state_code => state_code_i, seg => SEG, an => AN );
 
-    -- Testigos en LEDs
+    -- Testigos en LEDs (Útil para depuración rápida)
     LED(0) <= servo_cmd_i;   -- LED encendido si la puerta debería estar abierta
     LED(1) <= obstacle_i;    -- LED encendido si el sensor detecta algo
-
+    LED(2) <= PMOD_ECHO;
 end Structural;

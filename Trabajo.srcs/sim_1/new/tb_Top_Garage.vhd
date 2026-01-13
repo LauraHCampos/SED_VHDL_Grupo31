@@ -9,7 +9,7 @@ architecture sim of tb_Top_Garage is
     signal rst_n, btn, echo, trig, servo : std_logic := '1';
     signal led : std_logic_vector(1 downto 0);
 begin
-    -- El Top usa CPU_RESETN (Activo bajo)
+    -- Importante: El Top usa CPU_RESETN (Activo bajo)
     uut: entity work.Top_Garage port map (
         CLK100MHZ => clk, CPU_RESETN => rst_n, BTN_OPEN => btn,
         PMOD_ECHO => echo, PMOD_TRIG => trig, PMOD_SERVO => servo,

@@ -7,10 +7,10 @@ entity Ultrasonic_sensor is
 end Ultrasonic_sensor;
 
 architecture Behavioral of Ultrasonic_sensor is
-    signal count : unsigned(21 downto 0);
+    signal count : unsigned(23 downto 0);
     type state_t is (IDLE, SEND_TRIG, WAIT_ECHO, MEASURE);
     signal state : state_t;
-    constant THRESHOLD : integer := 870000; -- ~15cm
+    constant THRESHOLD : integer := 87000; -- ~15cm
 begin
     process(clk, rst) begin
         if rst = '1' then state <= IDLE; obstacle <= '0';
@@ -23,12 +23,12 @@ begin
                     end if;
                 when SEND_TRIG =>
                     trigger <= '1';
-                    if count < 1000 then count <= count + 1;
+                    if count < 10000 then count <= count + 1;
                     else trigger <= '0'; count <= (others => '0'); state <= WAIT_ECHO;
                     end if;
                 when WAIT_ECHO =>
                     if echo = '1' then state <= MEASURE; count <= (others => '0');
-                    elsif count > 2000000 then state <= IDLE;
+                    elsif count > 4000000 then state <= IDLE;
                     else count <= count + 1;
                     end if;
                 when MEASURE =>
